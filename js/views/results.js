@@ -60,7 +60,7 @@ export async function renderResults(app, user, surveyId) {
 // ── Stats tab ─────────────────────────────────────────────
 function statsHtml(questions, answers, totalResponses) {
   return questions.map(q => {
-    const qAnswers = answers.filter(a => a.question_id === q.id);
+    const qAnswers = answers.filter(a => Number(a.question_id) === Number(q.id));
     if (q.type === 'text') {
       const texts = qAnswers.map(a => a.value).filter(Boolean);
       return `<div class="stat-block">
@@ -112,7 +112,7 @@ function barRow(label, cnt, max, isOther = false) {
 // ── Detail tab ────────────────────────────────────────────
 function detailHtml(responses, answers, questions) {
   return `<div class="response-list">${responses.map((r, i) => {
-    const rAnswers = answers.filter(a => a.response_id === r.id);
+    const rAnswers = answers.filter(a => Number(a.response_id) === Number(r.id));
     return `
       <div class="response-item">
         <div class="response-header">
@@ -124,7 +124,7 @@ function detailHtml(responses, answers, questions) {
         </div>
         <div class="response-body">
           ${questions.map(q => {
-            const ans = rAnswers.find(a => a.question_id === q.id);
+            const ans = rAnswers.find(a => Number(a.question_id) === Number(q.id));
             let displayVal = '（未作答）';
             if (ans) {
               if (q.type === 'text') displayVal = escHtml(ans.value);
