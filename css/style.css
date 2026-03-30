@@ -4,30 +4,30 @@
    ============================================ */
 
 :root {
-  --bg:          #0c0906;
-  --bg2:         #120d08;
-  --surface:     #1a1410;
-  --surface2:    #221a12;
-  --surface3:    #2c2218;
-  --border:      #3a2d1e;
-  --border2:     #5a4535;
-  --gold:        #c9a96e;
-  --gold-light:  #e8c88a;
-  --gold-dark:   #9e7a45;
-  --gold-glow:   rgba(201,169,110,0.12);
-  --gold-glow2:  rgba(201,169,110,0.25);
-  --crimson:     #8b3a4a;
-  --crimson-l:   #b04d60;
-  --green:       #4a7c59;
-  --green-l:     #5ea672;
-  --text:        #f0e8d8;
-  --text-m:      #a89070;
-  --text-d:      #6b5d4e;
+  --bg:          #221508;
+  --bg2:         #2c1c0d;
+  --surface:     #342214;
+  --surface2:    #3e2c1a;
+  --surface3:    #4a3520;
+  --border:      #5c3f26;
+  --border2:     #7a5738;
+  --gold:        #dba84a;
+  --gold-light:  #f0c870;
+  --gold-dark:   #b8853a;
+  --gold-glow:   rgba(219,168,74,0.15);
+  --gold-glow2:  rgba(219,168,74,0.3);
+  --crimson:     #9b3a4a;
+  --crimson-l:   #c4566a;
+  --green:       #4a8c5c;
+  --green-l:     #62b878;
+  --text:        #fdf5e6;
+  --text-m:      #c8a882;
+  --text-d:      #907060;
   --r:           4px;
   --r2:          8px;
   --r3:          12px;
-  --shadow:      0 8px 32px rgba(0,0,0,0.7);
-  --shadow-g:    0 0 32px rgba(201,169,110,0.15);
+  --shadow:      0 8px 32px rgba(0,0,0,0.5);
+  --shadow-g:    0 0 32px rgba(219,168,74,0.2);
   --tr:          all 0.22s ease;
 }
 
@@ -37,6 +37,8 @@ html { scroll-behavior: smooth; }
 body {
   font-family: 'Cormorant Garamond', Georgia, serif;
   background: var(--bg);
+  background-image: radial-gradient(ellipse at 20% 0%, rgba(219,168,74,0.08) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 100%, rgba(155,58,74,0.06) 0%, transparent 50%);
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
