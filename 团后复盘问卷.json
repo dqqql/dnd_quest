@@ -1,0 +1,78 @@
+{
+  "title": "团后复盘问卷",
+  "description": "每次跑团结束后填写，帮助DM和玩家更好地了解彼此的感受，让下一次更好。本卷均为主观题，请尽量写具体。",
+  "questions": [
+    {
+      "type": "text",
+      "content": "本次跑团的日期？（例：2025.03.30）",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "这是哪场团？（例：第三话、匕首心第二回等）",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "你本场扮演的角色名字是？",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "single",
+      "content": "整体来说，你今天玩得开心吗？",
+      "options": ["非常开心，超出预期", "比较开心，整体满意", "一般，还好", "不太开心，有些失落", "很不开心"],
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "今天最让你印象深刻或最享受的一个瞬间是什么？（可以是剧情、互动、一句台词、任何事）",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "single",
+      "content": "同桌玩家之间的整体氛围如何？",
+      "options": ["很融洽，大家配合得很好", "基本顺畅，偶有小摩擦但无碍", "有些不协调，影响了部分体验", "比较糟糕，明显影响了我的状态"],
+      "has_other": true
+    },
+    {
+      "type": "text",
+      "content": "今天同桌中，有没有某人的行为让你感到不舒服或受到影响（可以不点名，描述行为即可）？如果没有，填 无 即可。",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "剧情安排方面，有没有让你觉得不舒服、困惑或走神的地方？（例如节奏太快/太慢、某段剧情触碰了边界、信息量太大等）没有的话填 无。",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "战斗安排方面（如有），有没有觉得不满意的地方？（例如：太简单/太难、太长、规则判定有疑问等）没有战斗或没有意见填 无。",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "今天有没有什么时刻，你想说点什么、做点什么，但没有机会？（被打断、节奏没接上、来不及等）",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "下一次跑团，你最希望出现或改善的一件事是什么？",
+      "options": null,
+      "has_other": false
+    },
+    {
+      "type": "text",
+      "content": "有什么想对DM或队友说的话吗？（鼓励、建议、或任何心里话都可以）",
+      "options": null,
+      "has_other": false
+    }
+  ]
+}
