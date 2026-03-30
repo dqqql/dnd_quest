@@ -111,14 +111,35 @@ function surveyCard(s, user, i) {
     ? `<span class="badge badge-closed">已关闭</span>`
     : `<span class="badge badge-open">开放中</span>`;
   const countBadge = `<span class="badge badge-count">${s.response_count} 份</span>`;
-  const ownerActions = isOwner ? `
-    <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${s.id}">编辑</button>
-    <button class="btn btn-ghost btn-sm" data-action="toggle" data-id="${s.id}" data-closed="${s.is_closed}">
-      ${s.is_closed ? '重新开放' : '关闭'}
-    </button>
-    <button class="btn btn-danger btn-sm" data-action="delete" data-id="${s.id}" data-title="${escHtml(s.title)}">删除</button>` : '';
-  const fillBtn = s.is_closed ? '' : `<button class="btn btn-primary btn-sm" data-action="fill" data-id="${s.id}">填写问卷</button>`;
-  const resultBtn = isOwner ? `<button class="btn btn-secondary btn-sm" data-action="results" data-id="${s.id}">查看结果</button>` : '';
+
+  // 填写按鈕
+  const fillBtn = s.is_closed
+    ? `<button class="btn btn-ghost btn-sm" disabled>已关闭</button>`
+    : `<button class="btn btn-primary btn-sm" data-action="fill" data-id="${s.id}">填写问卷</button>`;
+
+  // 查看结果按鈕（仅创建者）
+  const resultBtn = isOwner
+    ? `<button class="btn btn-secondary btn-sm" data-action="results" data-id="${s.id}">查看结果</button>`
+    : '';
+
+  // 更多下拉菜单（仅创建者）
+  const moreBtn = isOwner ? `
+    <div class="dropdown" id="dd-${s.id}">
+      <button class="btn btn-ghost btn-sm dropdown-toggle" data-dd="${s.id}">更多 ▾</button>
+      <div class="dropdown-menu">
+        <button class="dropdown-item" data-action="edit" data-id="${s.id}">❐ 编辑</button>
+        <button class="dropdown-item" data-action="toggle" data-id="${s.id}" data-closed="${s.is_closed}">
+          ${s.is_closed ? '↺ 重新开放' : '■ 关闭'}
+        </button>
+        <button class="dropdown-item dropdown-item-danger" data-action="delete" data-id="${s.id}" data-title="${escHtml(s.title)}">✖ 删除</button>
+      </div>
+    </div>` : '';
+
+  // 布局：非创建者只有一个中居的填写按鈕
+  const footerContent = isOwner
+    ? `<div class="card-btn-row">${fillBtn}${resultBtn}${moreBtn}</div>`
+    : `<div class="card-btn-row card-btn-center">${fillBtn}</div>`;
+
   return `
     <div class="survey-card" style="animation-delay:${i * 0.06}s">
       <h3 class="survey-card-title">${escHtml(s.title)}</h3>
@@ -129,14 +150,35 @@ function surveyCard(s, user, i) {
         ${statusBadge}${countBadge}
       </div>
       <div class="survey-card-footer">
-        <div class="survey-card-actions">${fillBtn}${resultBtn}</div>
-        <div class="survey-card-actions">${ownerActions}</div>
+        ${footerContent}
       </div>
     </div>`;
 }
 
 function bindCardEvents(app, user, surveys) {
-  app.querySelector('.survey-grid').addEventListener('click', async (e) => {
+  const grid = app.querySelector('.survey-grid');
+
+  // 下拉菜单切换
+  grid.addEventListener('click', (e) => {
+    const toggle = e.target.closest('[data-dd]');
+    if (toggle) {
+      const ddId = toggle.dataset.dd;
+      const menu = app.querySelector(`#dd-${ddId} .dropdown-menu`);
+      const isOpen = menu.classList.contains('open');
+      // 关闭所有
+      app.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
+      e.stopPropagation();
+      return;
+    }
+    // 点击其他关闭菜单
+    if (!e.target.closest('.dropdown-menu')) {
+      app.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
+    }
+  });
+
+  // 操作按鈕
+  grid.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const { action, id, closed, title } = btn.dataset;
@@ -144,6 +186,7 @@ function bindCardEvents(app, user, surveys) {
     if (action === 'results') return navigate(`/results/${id}`);
     if (action === 'edit')    return navigate(`/edit/${id}`);
     if (action === 'toggle') {
+      app.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
       const a = closed === '1' ? 'reopen' : 'close';
       const label = a === 'close' ? '关闭' : '重新开放';
       showModal({
@@ -156,6 +199,7 @@ function bindCardEvents(app, user, surveys) {
       });
     }
     if (action === 'delete') {
+      app.querySelectorAll('.dropdown-menu.open').forEach(m => m.classList.remove('open'));
       showModal({
         title: '删除问卷', body: `确定要永久删除「${title}」吗？此操作不可撤销。`,
         confirmText: '删除', danger: true,
