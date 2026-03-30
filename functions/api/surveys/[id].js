@@ -32,16 +32,45 @@ async function handlePut(request, env, id) {
     const survey = await env.DB.prepare('SELECT creator_id FROM surveys WHERE id = ? AND is_deleted = 0').bind(id).first();
     if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
     if (String(survey.creator_id) !== String(creator_id)) return Response.json({ error: '无权限' }, { status: 403, headers: h });
+
     await env.DB.prepare('UPDATE surveys SET title=?, description=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
       .bind(title, description || '', id).run();
-    await env.DB.prepare('DELETE FROM questions WHERE survey_id = ?').bind(id).run();
-    if (questions && questions.length > 0) {
-      const stmts = questions.map((q, i) =>
-        env.DB.prepare('INSERT INTO questions (survey_id, order_num, type, content, options, has_other) VALUES (?,?,?,?,?,?)')
-          .bind(id, i + 1, q.type, q.content, q.options ? JSON.stringify(q.options) : null, q.has_other ? 1 : 0)
-      );
-      await env.DB.batch(stmts);
-    }
+
+    // 取出现有题目（按 order_num 排序），尽量复用其 ID 以保护历史答案
+    const { results: existing } = await env.DB.prepare(
+      'SELECT id, order_num FROM questions WHERE survey_id = ? ORDER BY order_num'
+    ).bind(id).all();
+
+    const newQs = questions || [];
+    const stmts = [];
+
+    newQs.forEach((q, i) => {
+      const orderNum = i + 1;
+      const old = existing.find(e => e.order_num === orderNum);
+      if (old) {
+        // 复用旧 ID，原地更新内容
+        stmts.push(
+          env.DB.prepare('UPDATE questions SET type=?, content=?, options=?, has_other=? WHERE id=?')
+            .bind(q.type, q.content, q.options ? JSON.stringify(q.options) : null, q.has_other ? 1 : 0, old.id)
+        );
+      } else {
+        // 新增的题目
+        stmts.push(
+          env.DB.prepare('INSERT INTO questions (survey_id, order_num, type, content, options, has_other) VALUES (?,?,?,?,?,?)')
+            .bind(id, orderNum, q.type, q.content, q.options ? JSON.stringify(q.options) : null, q.has_other ? 1 : 0)
+        );
+      }
+    });
+
+    // 删除多余的旧题目（题目数量减少时）
+    const keepOrderNums = newQs.map((_, i) => i + 1);
+    const toDelete = existing.filter(e => !keepOrderNums.includes(e.order_num));
+    toDelete.forEach(e => {
+      stmts.push(env.DB.prepare('DELETE FROM questions WHERE id = ?').bind(e.id));
+    });
+
+    if (stmts.length > 0) await env.DB.batch(stmts);
+
     return Response.json({ success: true }, { headers: h });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500, headers: h });
