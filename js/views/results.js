@@ -132,11 +132,9 @@ function detailHtml(responses, answers, questions) {
                 let vals = [];
                 try { vals = JSON.parse(ans.value); if (!Array.isArray(vals)) vals = [ans.value]; }
                 catch { vals = [ans.value]; }
-                if (ans.other_text) vals = vals.filter(v => !q.options.includes(v));
                 const parts = [];
-                const knownVals = JSON.parse(ans.value || '[]');
-                if (Array.isArray(knownVals)) { parts.push(...knownVals.filter(v => q.options.includes(v)).map(escHtml)); }
-                else parts.push(escHtml(ans.value));
+                const knownVals = Array.isArray(vals) ? vals : [ans.value];
+                parts.push(...knownVals.filter(v => q.options.includes(v)).map(escHtml));
                 if (ans.other_text) parts.push(`<em style="color:var(--text-d)">其他: ${escHtml(ans.other_text)}</em>`);
                 displayVal = parts.join(' / ') || escHtml(ans.value);
               }
