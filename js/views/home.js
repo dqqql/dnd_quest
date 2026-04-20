@@ -290,78 +290,107 @@ function bindAdminActions(app, channelId) {
 }
 
 function bindSurveyActions(app, channel, manageableChannels) {
-  app.querySelectorAll('[data-action]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const action = button.dataset.action;
-      const surveyId = Number(button.dataset.id);
+  const grid = app.querySelector('.survey-grid');
+  if (!grid) return;
 
-      if (action === 'fill') return navigate(`/fill/${surveyId}`);
-      if (action === 'results') return navigate(`/results/${surveyId}`);
-      if (action === 'edit') return navigate(`/edit/${surveyId}`);
-      if (action === 'export') return exportSurvey(surveyId);
+  grid.addEventListener('click', async (event) => {
+    const toggle = event.target.closest('[data-more-toggle]');
+    if (toggle) {
+      const menu = toggle.closest('.dropdown')?.querySelector('.dropdown-menu');
+      const willOpen = !menu?.classList.contains('open');
+      closeOpenMenus(grid);
+      if (willOpen && menu) menu.classList.add('open');
+      event.stopPropagation();
+      return;
+    }
 
-      if (action === 'toggle') {
-        const nextAction = button.dataset.closed === '1' ? 'reopen' : 'close';
-        const label = nextAction === 'close' ? '关闭' : '重新开放';
-        showModal({
-          title: `${label}问卷`,
-          body: `确认要${label}这份问卷吗？`,
-          confirmText: label,
-          danger: nextAction === 'close',
-          onConfirm: async () => {
-            await api.patch(`/api/surveys/${surveyId}`, { action: nextAction });
-            toast(`已${label}`, 'success');
-            navigate(`/channel/${channel.id}`);
-          },
-        });
+    const button = event.target.closest('[data-action]');
+    if (!button) {
+      if (!event.target.closest('.dropdown')) closeOpenMenus(grid);
+      return;
+    }
+
+    closeOpenMenus(grid);
+
+    const action = button.dataset.action;
+    const surveyId = Number(button.dataset.id);
+
+    if (action === 'fill') return navigate(`/fill/${surveyId}`);
+    if (action === 'results') return navigate(`/results/${surveyId}`);
+    if (action === 'edit') return navigate(`/edit/${surveyId}`);
+    if (action === 'export') return exportSurvey(surveyId);
+
+    if (action === 'toggle') {
+      const nextAction = button.dataset.closed === '1' ? 'reopen' : 'close';
+      const label = nextAction === 'close' ? '关闭' : '重新开放';
+      showModal({
+        title: `${label}问卷`,
+        body: `确认要${label}这份问卷吗？`,
+        confirmText: label,
+        danger: nextAction === 'close',
+        onConfirm: async () => {
+          await api.patch(`/api/surveys/${surveyId}`, { action: nextAction });
+          toast(`已${label}`, 'success');
+          navigate(`/channel/${channel.id}`);
+        },
+      });
+      return;
+    }
+
+    if (action === 'delete') {
+      showModal({
+        title: '删除问卷',
+        body: '删除后这份问卷会从列表隐藏，确定继续吗？',
+        confirmText: '删除',
+        danger: true,
+        onConfirm: async () => {
+          await api.delete(`/api/surveys/${surveyId}`, {});
+          toast('问卷已删除', 'success');
+          navigate(`/channel/${channel.id}`);
+        },
+      });
+      return;
+    }
+
+    if (action === 'move') {
+      const targets = manageableChannels.filter((item) => Number(item.id) !== Number(button.dataset.channelId));
+      if (!targets.length) {
+        toast('没有可移动的其他频道', 'info');
         return;
       }
-
-      if (action === 'delete') {
-        showModal({
-          title: '删除问卷',
-          body: '删除后这份问卷会从列表隐藏，确定继续吗？',
-          confirmText: '删除',
-          danger: true,
-          onConfirm: async () => {
-            await api.delete(`/api/surveys/${surveyId}`, {});
-            toast('问卷已删除', 'success');
-            navigate(`/channel/${channel.id}`);
-          },
-        });
-        return;
-      }
-
-      if (action === 'move') {
-        const targets = manageableChannels.filter((item) => Number(item.id) !== Number(button.dataset.channelId));
-        if (!targets.length) {
-          toast('没有可移动的其他频道', 'info');
-          return;
-        }
-        showModal({
-          title: '移动问卷',
-          allowHtml: true,
-          body: `
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label" for="survey-move-channel">目标频道</label>
-              <select id="survey-move-channel" class="form-input">
-                ${targets.map((item) => `<option value="${item.id}">${escHtml(item.name)}</option>`).join('')}
-              </select>
-            </div>`,
-          confirmText: '移动',
-          onConfirm: async (modal) => {
-            const targetChannelId = Number(modal.querySelector('#survey-move-channel').value);
-            await api.patch(`/api/surveys/${surveyId}`, {
-              action: 'move',
-              channel_id: targetChannelId,
-            });
-            toast('问卷已移动', 'success');
-            navigate(`/channel/${targetChannelId}`);
-          },
-        });
-      }
-    });
+      showModal({
+        title: '移动问卷',
+        allowHtml: true,
+        body: `
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="survey-move-channel">目标频道</label>
+            <select id="survey-move-channel" class="form-input">
+              ${targets.map((item) => `<option value="${item.id}">${escHtml(item.name)}</option>`).join('')}
+            </select>
+          </div>`,
+        confirmText: '移动',
+        onConfirm: async (modal) => {
+          const targetChannelId = Number(modal.querySelector('#survey-move-channel').value);
+          await api.patch(`/api/surveys/${surveyId}`, {
+            action: 'move',
+            channel_id: targetChannelId,
+          });
+          toast('问卷已移动', 'success');
+          navigate(`/channel/${targetChannelId}`);
+        },
+      });
+    }
   });
+
+  document.addEventListener('click', handleOutsideClick);
+
+  function handleOutsideClick(event) {
+    if (!grid.isConnected) {
+      document.removeEventListener('click', handleOutsideClick);
+      return;
+    }
+    if (!event.target.closest('.dropdown')) closeOpenMenus(grid);
+  }
 }
 
 async function exportSurvey(surveyId) {
@@ -475,6 +504,13 @@ function channelAdminHtml(channel, members) {
 
 function surveyCard(survey, channel, index, manageableChannels) {
   const canMove = survey.can_edit && manageableChannels.length > 1;
+  const moreActions = [
+    `<button class="dropdown-item" data-action="export" data-id="${survey.id}">导出 JSON</button>`,
+    survey.can_edit ? `<button class="dropdown-item" data-action="edit" data-id="${survey.id}">编辑</button>` : '',
+    survey.can_edit && canMove ? `<button class="dropdown-item" data-action="move" data-id="${survey.id}" data-channel-id="${channel.id}">移动频道</button>` : '',
+    survey.can_edit ? `<button class="dropdown-item" data-action="toggle" data-id="${survey.id}" data-closed="${survey.is_closed ? 1 : 0}">${survey.is_closed ? '重新开放' : '关闭问卷'}</button>` : '',
+    survey.can_edit ? `<button class="dropdown-item dropdown-item-danger" data-action="delete" data-id="${survey.id}">删除问卷</button>` : '',
+  ].filter(Boolean).join('');
 
   return `
     <div class="survey-card" style="animation-delay:${index * 0.05}s">
@@ -486,23 +522,23 @@ function surveyCard(survey, channel, index, manageableChannels) {
         <span class="badge ${survey.is_closed ? 'badge-closed' : 'badge-open'}">${survey.is_closed ? '已关闭' : '开放中'}</span>
         <span class="badge badge-count">${survey.response_count} 份</span>
       </div>
-      <div class="survey-card-footer" style="flex-direction:column;align-items:stretch;gap:.75rem">
-        <div class="card-btn-row ${survey.can_view_results || survey.can_edit ? '' : 'card-btn-center'}">
+      <div class="survey-card-footer">
+        <div class="card-btn-row ${survey.can_view_results || survey.can_fill ? '' : 'card-btn-center'}">
           ${survey.can_fill ? `<button class="btn btn-primary btn-sm" data-action="fill" data-id="${survey.id}">填写问卷</button>` : `<button class="btn btn-ghost btn-sm" disabled>不可填写</button>`}
           ${survey.can_view_results ? `<button class="btn btn-secondary btn-sm" data-action="results" data-id="${survey.id}">查看结果</button>` : ''}
-          <button class="btn btn-ghost btn-sm" data-action="export" data-id="${survey.id}">导出 JSON</button>
+          <div class="dropdown survey-more">
+            <button class="btn btn-ghost btn-sm" type="button" data-more-toggle="${survey.id}">更多</button>
+            <div class="dropdown-menu">
+              ${moreActions}
+            </div>
+          </div>
         </div>
-        ${survey.can_edit
-          ? `
-            <div class="card-btn-row">
-              <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${survey.id}">编辑</button>
-              ${canMove ? `<button class="btn btn-ghost btn-sm" data-action="move" data-id="${survey.id}" data-channel-id="${channel.id}">移动频道</button>` : ''}
-              <button class="btn btn-ghost btn-sm" data-action="toggle" data-id="${survey.id}" data-closed="${survey.is_closed ? 1 : 0}">${survey.is_closed ? '重新开放' : '关闭'}</button>
-              <button class="btn btn-danger btn-sm" data-action="delete" data-id="${survey.id}">删除</button>
-            </div>`
-          : ''}
       </div>
     </div>`;
+}
+
+function closeOpenMenus(root) {
+  root.querySelectorAll('.dropdown-menu.open').forEach((menu) => menu.classList.remove('open'));
 }
 
 function validateSurveyJson(data) {
