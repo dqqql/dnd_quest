@@ -1,4 +1,4 @@
-import { createSession, validatePassword, validateUsername, verifyPassword } from '../_lib/auth.js';
+import { createSession, validateLoginPassword, validateUsername, verifyPassword } from '../_lib/auth.js';
 import { ensurePublicChannel } from '../_lib/channels.js';
 import { error, json, methodNotAllowed } from '../_lib/http.js';
 
@@ -10,7 +10,7 @@ export async function onRequest(context) {
     const { username, password } = await context.request.json();
     const usernameError = validateUsername(username);
     if (usernameError) return error(usernameError, 400);
-    const passwordError = validatePassword(password);
+    const passwordError = validateLoginPassword(password);
     if (passwordError) return error(passwordError, 400);
 
     const normalizedUsername = String(username).trim();

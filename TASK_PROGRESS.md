@@ -47,6 +47,7 @@ Turn the current personal-use survey app into a public multi-user app with:
 - [x] Rework home/channel browsing UI
 - [x] Add private channel management UI
 - [x] Add import/export/move UI
+- [x] Draft legacy DB migration plan and SQL
 - [ ] Smoke-test core flows
 
 ## Notes
@@ -55,3 +56,4 @@ Turn the current personal-use survey app into a public multi-user app with:
 - Current database schema will need a breaking v1 refresh or equivalent migration.
 - Frontend routes now pivot around real sessions and channel-based permissions.
 - Remaining work is mainly verification, polish, and any migration/deployment follow-up.
+- Legacy production data now has a documented migration path in `MIGRATE_LEGACY_DB.md` and `migrations/legacy_to_v1.sql`.
