@@ -1,5 +1,3 @@
-BEGIN TRANSACTION;
-
 PRAGMA foreign_keys = OFF;
 
 -- Preserve old core tables first so the original rows stay available for inspection.
@@ -98,5 +96,3 @@ CREATE INDEX idx_questions_survey_id ON questions(survey_id);
 CREATE INDEX idx_responses_survey_id ON responses(survey_id);
 CREATE INDEX idx_responses_user_id ON responses(user_id);
 CREATE INDEX idx_answers_response_id ON answers(response_id);
-
-COMMIT;
