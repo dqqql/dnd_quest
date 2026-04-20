@@ -1,14 +1,6 @@
-export async function onRequestPost({ request, env }) {
-  try {
-    const { name } = await request.json();
-    if (!name || !name.trim()) {
-      return Response.json({ error: '名字不能为空' }, { status: 400 });
-    }
-    const n = name.trim();
-    await env.DB.prepare('INSERT OR IGNORE INTO users (name) VALUES (?)').bind(n).run();
-    const user = await env.DB.prepare('SELECT id, name, created_at FROM users WHERE name = ?').bind(n).first();
-    return Response.json(user);
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500 });
-  }
+import { error, methodNotAllowed } from './_lib/http.js';
+
+export async function onRequest(context) {
+  if (context.request.method === 'OPTIONS') return methodNotAllowed();
+  return error('该接口已停用，请使用 /api/auth/register 和 /api/auth/login', 410);
 }

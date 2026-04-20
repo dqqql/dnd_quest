@@ -1,105 +1,198 @@
-const h = { 'Access-Control-Allow-Origin': '*' };
+import { requireUser } from '../_lib/auth.js';
+import { ensurePublicChannel, getChannelForUser } from '../_lib/channels.js';
+import { error, json, methodNotAllowed } from '../_lib/http.js';
+import { exportSurveyStructure, getSurveyQuestions, getSurveyWithChannel } from '../_lib/surveys.js';
 
-export async function onRequest({ request, env, params }) {
-  const id = params.id;
-  if (request.method === 'GET') return handleGet(env, id);
-  if (request.method === 'PUT') return handlePut(request, env, id);
-  if (request.method === 'DELETE') return handleDelete(request, env, id);
-  if (request.method === 'PATCH') return handlePatch(request, env, id);
-  return Response.json({ error: 'Method not allowed' }, { status: 405, headers: h });
+export async function onRequest(context) {
+  if (context.request.method === 'GET') return handleGet(context);
+  if (context.request.method === 'PUT') return handlePut(context);
+  if (context.request.method === 'DELETE') return handleDelete(context);
+  if (context.request.method === 'PATCH') return handlePatch(context);
+  return methodNotAllowed();
 }
 
-async function handleGet(env, id) {
+async function handleGet(context) {
   try {
-    const survey = await env.DB.prepare(`
-      SELECT s.*, u.name as creator_name,
-        (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id) as response_count
-      FROM surveys s JOIN users u ON s.creator_id = u.id
-      WHERE s.id = ? AND s.is_deleted = 0
-    `).bind(id).first();
-    if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
-    const { results } = await env.DB.prepare('SELECT * FROM questions WHERE survey_id = ? ORDER BY order_num').bind(id).all();
-    const questions = results.map(q => ({ ...q, options: q.options ? JSON.parse(q.options) : [], has_other: !!q.has_other }));
-    return Response.json({ ...survey, questions }, { headers: h });
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500, headers: h });
+    await ensurePublicChannel(context.env);
+    const user = await requireUser(context.request, context.env);
+    const surveyId = Number(context.params.id);
+    const survey = await getSurveyWithChannel(context.env, surveyId, user.id);
+    if (!survey) return error('问卷不存在', 404);
+    if (!survey.can_view) return error('无权查看该问卷', 403);
+
+    const questions = await getSurveyQuestions(context.env, surveyId);
+    const url = new URL(context.request.url);
+    if (url.searchParams.get('format') === 'export') {
+      return json(exportSurveyStructure(survey, questions));
+    }
+
+    return json({
+      id: survey.id,
+      channel_id: survey.channel_id,
+      title: survey.title,
+      description: survey.description,
+      creator_id: survey.creator_id,
+      creator_name: survey.creator_name,
+      is_closed: survey.is_closed,
+      created_at: survey.created_at,
+      updated_at: survey.updated_at,
+      channel: survey.channel
+        ? {
+            id: survey.channel.id,
+            name: survey.channel.name,
+            owner_id: survey.channel.owner_id,
+            owner_name: survey.channel.owner_name,
+            is_public: survey.channel.is_public,
+            access_mode: survey.channel.access_mode,
+            is_owner: survey.channel.is_owner,
+            is_member: survey.channel.is_member,
+            can_view: survey.channel.can_view,
+            can_fill: survey.channel.can_fill,
+          }
+        : null,
+      can_fill: survey.can_fill,
+      can_edit: survey.can_edit,
+      can_view_results: survey.can_view_results,
+      questions,
+    });
+  } catch (err) {
+    return err instanceof Response ? err : error(err.message || '获取问卷失败', 500);
   }
 }
 
-async function handlePut(request, env, id) {
+async function handlePut(context) {
   try {
-    const { title, description, creator_id, questions } = await request.json();
-    const survey = await env.DB.prepare('SELECT creator_id FROM surveys WHERE id = ? AND is_deleted = 0').bind(id).first();
-    if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
-    if (String(survey.creator_id) !== String(creator_id)) return Response.json({ error: '无权限' }, { status: 403, headers: h });
+    await ensurePublicChannel(context.env);
+    const user = await requireUser(context.request, context.env);
+    const surveyId = Number(context.params.id);
+    const survey = await getSurveyWithChannel(context.env, surveyId, user.id);
+    if (!survey) return error('问卷不存在', 404);
+    if (!survey.can_edit) return error('无权编辑该问卷', 403);
 
-    await env.DB.prepare('UPDATE surveys SET title=?, description=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
-      .bind(title, description || '', id).run();
+    const { title, description, questions } = await context.request.json();
+    const surveyTitle = String(title || '').trim();
+    if (!surveyTitle) return error('问卷标题不能为空', 400);
 
-    // 取出现有题目（按 order_num 排序），尽量复用其 ID 以保护历史答案
-    const { results: existing } = await env.DB.prepare(
-      'SELECT id, order_num FROM questions WHERE survey_id = ? ORDER BY order_num'
-    ).bind(id).all();
+    await context.env.DB.prepare(`
+      UPDATE surveys
+      SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(surveyTitle, String(description || '').trim(), surveyId).run();
 
-    const newQs = questions || [];
-    const stmts = [];
+    const { results: existing } = await context.env.DB.prepare(`
+      SELECT id, order_num
+      FROM questions
+      WHERE survey_id = ?
+      ORDER BY order_num
+    `).bind(surveyId).all();
 
-    newQs.forEach((q, i) => {
-      const orderNum = i + 1;
-      const old = existing.find(e => e.order_num === orderNum);
-      if (old) {
-        // 复用旧 ID，原地更新内容
-        stmts.push(
-          env.DB.prepare('UPDATE questions SET type=?, content=?, options=?, has_other=? WHERE id=?')
-            .bind(q.type, q.content, q.options ? JSON.stringify(q.options) : null, q.has_other ? 1 : 0, old.id)
+    const nextQuestions = Array.isArray(questions) ? questions : [];
+    const statements = [];
+    nextQuestions.forEach((question, index) => {
+      const orderNum = index + 1;
+      const current = existing.find((item) => Number(item.order_num) === orderNum);
+      if (current) {
+        statements.push(
+          context.env.DB.prepare(`
+            UPDATE questions
+            SET type = ?, content = ?, options = ?, has_other = ?
+            WHERE id = ?
+          `).bind(
+            question.type,
+            question.content,
+            question.options ? JSON.stringify(question.options) : null,
+            question.has_other ? 1 : 0,
+            current.id
+          )
         );
       } else {
-        // 新增的题目
-        stmts.push(
-          env.DB.prepare('INSERT INTO questions (survey_id, order_num, type, content, options, has_other) VALUES (?,?,?,?,?,?)')
-            .bind(id, orderNum, q.type, q.content, q.options ? JSON.stringify(q.options) : null, q.has_other ? 1 : 0)
+        statements.push(
+          context.env.DB.prepare(`
+            INSERT INTO questions (survey_id, order_num, type, content, options, has_other)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).bind(
+            surveyId,
+            orderNum,
+            question.type,
+            question.content,
+            question.options ? JSON.stringify(question.options) : null,
+            question.has_other ? 1 : 0
+          )
         );
       }
     });
 
-    // 删除多余的旧题目（题目数量减少时）
-    const keepOrderNums = newQs.map((_, i) => i + 1);
-    const toDelete = existing.filter(e => !keepOrderNums.includes(e.order_num));
-    toDelete.forEach(e => {
-      stmts.push(env.DB.prepare('DELETE FROM questions WHERE id = ?').bind(e.id));
-    });
+    const keepOrderNums = new Set(nextQuestions.map((_, index) => index + 1));
+    existing
+      .filter((item) => !keepOrderNums.has(Number(item.order_num)))
+      .forEach((item) => {
+        statements.push(context.env.DB.prepare('DELETE FROM questions WHERE id = ?').bind(item.id));
+      });
 
-    if (stmts.length > 0) await env.DB.batch(stmts);
-
-    return Response.json({ success: true }, { headers: h });
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500, headers: h });
+    if (statements.length) await context.env.DB.batch(statements);
+    return json({ success: true });
+  } catch (err) {
+    return err instanceof Response ? err : error(err.message || '保存问卷失败', 500);
   }
 }
 
-async function handleDelete(request, env, id) {
+async function handleDelete(context) {
   try {
-    const { creator_id } = await request.json();
-    const survey = await env.DB.prepare('SELECT creator_id FROM surveys WHERE id = ? AND is_deleted = 0').bind(id).first();
-    if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
-    if (String(survey.creator_id) !== String(creator_id)) return Response.json({ error: '无权限' }, { status: 403, headers: h });
-    await env.DB.prepare('UPDATE surveys SET is_deleted=1, updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(id).run();
-    return Response.json({ success: true }, { headers: h });
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500, headers: h });
+    await ensurePublicChannel(context.env);
+    const user = await requireUser(context.request, context.env);
+    const surveyId = Number(context.params.id);
+    const survey = await getSurveyWithChannel(context.env, surveyId, user.id);
+    if (!survey) return error('问卷不存在', 404);
+    if (!survey.can_edit) return error('无权删除该问卷', 403);
+
+    await context.env.DB.prepare(`
+      UPDATE surveys
+      SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(surveyId).run();
+
+    return json({ success: true });
+  } catch (err) {
+    return err instanceof Response ? err : error(err.message || '删除问卷失败', 500);
   }
 }
 
-async function handlePatch(request, env, id) {
+async function handlePatch(context) {
   try {
-    const { creator_id, action } = await request.json();
-    const survey = await env.DB.prepare('SELECT creator_id FROM surveys WHERE id = ? AND is_deleted = 0').bind(id).first();
-    if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
-    if (String(survey.creator_id) !== String(creator_id)) return Response.json({ error: '无权限' }, { status: 403, headers: h });
-    const closed = action === 'close' ? 1 : 0;
-    await env.DB.prepare('UPDATE surveys SET is_closed=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(closed, id).run();
-    return Response.json({ success: true, is_closed: closed }, { headers: h });
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500, headers: h });
+    await ensurePublicChannel(context.env);
+    const user = await requireUser(context.request, context.env);
+    const surveyId = Number(context.params.id);
+    const survey = await getSurveyWithChannel(context.env, surveyId, user.id);
+    if (!survey) return error('问卷不存在', 404);
+    if (!survey.can_edit) return error('无权操作该问卷', 403);
+
+    const { action, channel_id } = await context.request.json();
+    if (action === 'close' || action === 'reopen') {
+      const nextValue = action === 'close' ? 1 : 0;
+      await context.env.DB.prepare(`
+        UPDATE surveys
+        SET is_closed = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(nextValue, surveyId).run();
+      return json({ success: true, is_closed: Boolean(nextValue) });
+    }
+
+    if (action === 'move') {
+      const targetChannelId = Number(channel_id);
+      if (!targetChannelId) return error('缺少目标频道', 400);
+      const targetChannel = await getChannelForUser(context.env, targetChannelId, user.id);
+      if (!targetChannel) return error('目标频道不存在', 404);
+      if (!targetChannel.is_public && !targetChannel.is_owner) return error('只能移动到公共频道或你管理的私密频道', 403);
+      await context.env.DB.prepare(`
+        UPDATE surveys
+        SET channel_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(targetChannelId, surveyId).run();
+      return json({ success: true });
+    }
+
+    return error('不支持的操作', 400);
+  } catch (err) {
+    return err instanceof Response ? err : error(err.message || '更新问卷失败', 500);
   }
 }

@@ -1,46 +1,55 @@
-const h = { 'Access-Control-Allow-Origin': '*' };
+import { requireUser } from '../../_lib/auth.js';
+import { ensurePublicChannel } from '../../_lib/channels.js';
+import { error, json, methodNotAllowed } from '../../_lib/http.js';
+import { getSurveyQuestions, getSurveyWithChannel } from '../../_lib/surveys.js';
 
-export async function onRequest({ request, env, params }) {
+export async function onRequest(context) {
+  if (context.request.method !== 'GET') return methodNotAllowed();
+
   try {
-    const surveyId = params.id;
-    const url = new URL(request.url);
-    const requesterId = url.searchParams.get('user_id');
+    await ensurePublicChannel(context.env);
+    const user = await requireUser(context.request, context.env);
+    const surveyId = Number(context.params.id);
+    const survey = await getSurveyWithChannel(context.env, surveyId, user.id);
+    if (!survey) return error('问卷不存在', 404);
+    if (!survey.can_view_results) return error('仅问卷创建者可查看结果', 403);
 
-    const survey = await env.DB.prepare(`
-      SELECT s.*, u.name as creator_name
-      FROM surveys s JOIN users u ON s.creator_id = u.id
-      WHERE s.id = ? AND s.is_deleted = 0
-    `).bind(surveyId).first();
-    if (!survey) return Response.json({ error: '问卷不存在' }, { status: 404, headers: h });
-    if (String(survey.creator_id) !== String(requesterId))
-      return Response.json({ error: '仅创建者可查看结果' }, { status: 403, headers: h });
-
-    const { results: responses } = await env.DB.prepare(`
-      SELECT r.id, r.submitted_at, u.name as user_name, u.id as user_id
-      FROM responses r JOIN users u ON r.user_id = u.id
-      WHERE r.survey_id = ? ORDER BY r.submitted_at DESC
+    const { results: responses } = await context.env.DB.prepare(`
+      SELECT r.id, r.submitted_at, u.username AS user_name, u.id AS user_id
+      FROM responses r
+      JOIN users u ON u.id = r.user_id
+      WHERE r.survey_id = ?
+      ORDER BY r.submitted_at DESC
     `).bind(surveyId).all();
 
-    const { results: answers } = await env.DB.prepare(`
+    const { results: answers } = await context.env.DB.prepare(`
       SELECT a.response_id, a.question_id, a.value, a.other_text,
-             q.content as question_content, q.type, q.options, q.order_num, q.has_other
+             q.content AS question_content, q.type, q.options, q.order_num, q.has_other
       FROM answers a
-      LEFT JOIN questions q ON a.question_id = q.id
+      LEFT JOIN questions q ON q.id = a.question_id
       WHERE a.response_id IN (SELECT id FROM responses WHERE survey_id = ?)
       ORDER BY a.response_id, q.order_num
     `).bind(surveyId).all();
 
-    const { results: questions } = await env.DB.prepare(
-      'SELECT * FROM questions WHERE survey_id = ? ORDER BY order_num'
-    ).bind(surveyId).all();
-
-    return Response.json({
-      survey,
-      questions: questions.map(q => ({ ...q, options: q.options ? JSON.parse(q.options) : [], has_other: !!q.has_other })),
+    const questions = await getSurveyQuestions(context.env, surveyId);
+    return json({
+      survey: {
+        id: survey.id,
+        title: survey.title,
+        description: survey.description,
+        channel_id: survey.channel_id,
+        creator_id: survey.creator_id,
+        creator_name: survey.creator_name,
+      },
+      questions,
       responses,
-      answers: answers.map(a => ({ ...a, options: a.options ? JSON.parse(a.options) : [] }))
-    }, { headers: h });
-  } catch (e) {
-    return Response.json({ error: e.message }, { status: 500, headers: h });
+      answers: answers.map((answer) => ({
+        ...answer,
+        options: answer.options ? JSON.parse(answer.options) : [],
+        has_other: Boolean(answer.has_other),
+      })),
+    });
+  } catch (err) {
+    return err instanceof Response ? err : error(err.message || '获取问卷结果失败', 500);
   }
 }
