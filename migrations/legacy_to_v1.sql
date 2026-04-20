@@ -60,12 +60,12 @@ VALUES ('公共频道', 'public', NULL, 1, 'visible', NULL);
 
 -- Migrate users. All legacy users receive temporary password 123456.
 -- Hash value:
--- pbkdf2$310000$bGVnYWN5LW1pZ3JhdGlvbg$ek3D0JocSpAjBvmrKQUIwfCN8rjSWFr992CExmyHL30
+-- pbkdf2$100000$bGVnYWN5LW1pZ3JhdGlvbg$98rNGgYJq6hYn_ngLJR70Z8bgWU_4OsKY32TB2z9VyA
 INSERT INTO users (id, username, password_hash, created_at)
 SELECT
   id,
   TRIM(name) AS username,
-  'pbkdf2$310000$bGVnYWN5LW1pZ3JhdGlvbg$ek3D0JocSpAjBvmrKQUIwfCN8rjSWFr992CExmyHL30' AS password_hash,
+  'pbkdf2$100000$bGVnYWN5LW1pZ3JhdGlvbg$98rNGgYJq6hYn_ngLJR70Z8bgWU_4OsKY32TB2z9VyA' AS password_hash,
   created_at
 FROM legacy_users;
 

@@ -3,7 +3,7 @@ import { error } from './http.js';
 const encoder = new TextEncoder();
 const SESSION_COOKIE = 'wj_session';
 const SESSION_DAYS = 30;
-const PBKDF2_ITERATIONS = 310000;
+const PBKDF2_ITERATIONS = 100000;
 const HASH_ALGO = 'SHA-256';
 
 function bytesToBase64Url(bytes) {

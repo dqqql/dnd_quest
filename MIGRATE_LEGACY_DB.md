@@ -76,6 +76,11 @@ The codebase now supports:
 - registration >= 8 chars
 - login can accept migrated `123456`
 
+The PBKDF2 iteration count used by the deployed code must stay within Cloudflare's supported limit.
+The current repo uses:
+
+- `100000` iterations
+
 Make sure this commit is deployed before migrating users.
 
 ### Step 3. Run the legacy migration SQL against the remote DB
@@ -84,6 +89,12 @@ From the repo root:
 
 ```powershell
 npx wrangler d1 execute quest --remote --file=migrations/legacy_to_v1.sql
+```
+
+If you already ran an earlier migration that used `310000` iterations, apply this one-time repair too:
+
+```powershell
+npx wrangler d1 execute quest --remote --file=migrations/fix_pbkdf2_iterations.sql
 ```
 
 ### Step 4. Verify the migration
